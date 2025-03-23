@@ -1,0 +1,6 @@
+requirements.txt
+venv/
+client/venv
+server/venv
+__pycache__/
+

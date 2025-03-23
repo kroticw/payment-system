@@ -1,0 +1,49 @@
+version: '3'
+
+services:
+  bank:
+    build:
+      context: ./bank
+      dockerfile: Dockerfile
+    container_name: bank-server
+    ports:
+      - "8080:8080"
+    networks:
+      - payment-network
+    restart: unless-stopped
+
+  client1:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: client-server-1
+    ports:
+      - "5001:5001"
+    environment:
+      - BANK_SERVER_URL=http://bank:8080
+      - CLIENT_PORT=5001
+    networks:
+      - payment-network
+    depends_on:
+      - bank
+    restart: unless-stopped
+
+  client2:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: client-server-2
+    ports:
+      - "5002:5001"
+    environment:
+      - BANK_SERVER_URL=http://bank:8080
+      - CLIENT_PORT=5001
+    networks:
+      - payment-network
+    depends_on:
+      - bank
+    restart: unless-stopped
+
+networks:
+  payment-network:
+    driver: bridge 
