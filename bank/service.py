@@ -1,15 +1,25 @@
 import logging
 import os
+from Crypto.PublicKey import RSA
+from Crypto.PublicKey.RSA import RsaKey
+
 from database import (
     init_db, create_account, get_account, get_accounts_by_client,
     create_banknote, get_banknote, get_banknote_by_uuid, 
     update_banknote_status, get_banknotes_by_status, get_all_banknotes
 )
 
+CLIENT_PUBLIC_KEY_PATH = "client_public_key.pem"
+
 # Настройка логирования
 logger = logging.getLogger(__name__)
 
+
 class BankService:
+    private_key = None
+    public_key = None
+    client_public_key = None
+
     def __init__(self):
         """Инициализация банковского сервиса"""
         self.db_path = os.environ.get('DB_PATH', 'bank.db')
@@ -19,7 +29,25 @@ class BankService:
         """Инициализация базы данных"""
         init_db()
         logger.info("База данных инициализирована")
-    
+
+    def get_client_public_key(self):
+        return self.client_public_key
+
+    def get_server_private_key(self):
+        return self.private_key
+
+    def get_server_public_key(self):
+        return self.public_key
+
+    def save_client_public_key(self, client_public_key):
+        with open(CLIENT_PUBLIC_KEY_PATH, "w") as f:
+            f.write(client_public_key)
+        self.client_public_key = client_public_key
+
+    def set_keys(self, private_key, public_key):
+        self.private_key = private_key
+        self.public_key = public_key
+
     # Методы для работы со счетами
     
     def create_bank_account(self, client_id, initial_balance=0.0):
@@ -30,7 +58,8 @@ class BankService:
             return {
                 "status": "success",
                 "message": "Счет успешно создан",
-                "account": account
+                "account": account,
+                "server_public_key": self.get_server_public_key().decode(),
             }, 200
         except Exception as e:
             logger.error(f"Ошибка при создании счета: {str(e)}")

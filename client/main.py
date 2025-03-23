@@ -11,8 +11,8 @@ from Crypto.PublicKey import RSA
 import signal
 
 # Пути к ключам
-CLIENT_PRIVATE_KEY_PATH = "server_private_key.pem"
-CLIENT_PUBLIC_KEY_PATH = "server_public_key.pem"
+CLIENT_PRIVATE_KEY_PATH = "client_private_key.pem"
+CLIENT_PUBLIC_KEY_PATH = "client_public_key.pem"
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, 

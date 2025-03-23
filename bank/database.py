@@ -52,7 +52,7 @@ def create_account(client_id, initial_balance=0.0):
         
         # Вставка нового счета
         cursor.execute(
-            "INSERT INTO bank_account (id, client_id, balance, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO bank_account (id, client_id, balance, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
             (account_id, client_id, initial_balance, now, now)
         )
         

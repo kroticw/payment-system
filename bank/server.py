@@ -1,8 +1,7 @@
 from flask import Flask, request, jsonify
 import logging
 import os
-from service import bank_service
-from main import SERVER_PUBLIC_KEY_PATH, SERVER_PRIVATE_KEY_PATH
+from service import *
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, 
@@ -36,9 +35,14 @@ def create_bank_account():
     # Проверка необходимых полей
     if 'client_id' not in data:
         return jsonify({"status": "error", "message": "Не указан идентификатор клиента"}), 400
+
+    if 'client_public_key' not in data:
+        return  jsonify({"status": "error", "message": "Не указан публичный ключ клиента"}), 403
     
     client_id = data['client_id']
     initial_balance = data.get('initial_balance', 0.0)
+
+    bank_service.save_client_public_key(data['client_public_key'])
     
     response, status_code = bank_service.create_bank_account(client_id, initial_balance)
     return jsonify(response), status_code
@@ -125,6 +129,10 @@ def not_found(e):
 def server_error(e):
     logger.error(f"Внутренняя ошибка сервера: {str(e)}")
     return jsonify({"status": "error", "message": "Внутренняя ошибка сервера"}), 500
+
+@app.errorhandler(403)
+def forbidden(e):
+    return jsonify({"status": "error", "message": "Нет доступа"}), 403
 
 if __name__ == '__main__':
     # Инициализация базы данных

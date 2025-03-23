@@ -47,17 +47,18 @@ def console_menu():
                     f"{CLIENT_API_URL}/api/v1/create-account",
                     json={
                         "initial_balance": initial_balance,
-                        "public_key": get_client_public_key()
+                        "client_public_key": get_client_public_key().decode()
                     }
                 )
                 if response.status_code == 200:
                     account_data = response.json()
                     if account_data.get("status") == "success":
                         print(f"Счет успешно создан! ID: {account_data['account']['id']}")
-
-
                     else:
                         print(f"Ошибка: {account_data.get('message', 'Неизвестная ошибка')}")
+
+                    save_server_public_key(account_data['server_public_key'])
+
                 else:
                     print(f"Ошибка: Код ответа {response.status_code}")
             except Exception as e:

@@ -10,6 +10,7 @@ services:
       - "8080:8080"
     volumes:
       - bank-data:/app/data
+      - ./bank:/app
     environment:
       - DB_PATH=/app/data/bank.db
     networks:
