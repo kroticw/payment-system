@@ -8,9 +8,14 @@ services:
     container_name: bank-server
     ports:
       - "8080:8080"
+    volumes:
+      - bank-data:/app/data
+    environment:
+      - DB_PATH=/app/data/bank.db
     networks:
       - payment-network
     restart: unless-stopped
+    command: python main.py
 
   client1:
     build:
@@ -22,11 +27,15 @@ services:
     environment:
       - BANK_SERVER_URL=http://bank:8080
       - CLIENT_PORT=5001
+      - CLIENT_ID=client1
     networks:
       - payment-network
     depends_on:
       - bank
     restart: unless-stopped
+    stdin_open: true
+    tty: true
+    command: python main.py --mode server
 
   client2:
     build:
@@ -38,12 +47,20 @@ services:
     environment:
       - BANK_SERVER_URL=http://bank:8080
       - CLIENT_PORT=5001
+      - CLIENT_ID=client2
     networks:
       - payment-network
     depends_on:
       - bank
     restart: unless-stopped
+    stdin_open: true
+    tty: true
+    command: python main.py --mode server
 
 networks:
   payment-network:
-    driver: bridge 
+    driver: bridge
+
+volumes:
+  bank-data:
+    driver: local 

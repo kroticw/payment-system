@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 import requests
 import logging
 import os
+import uuid
 from functools import wraps
 
 # Настройка логирования
@@ -15,6 +16,7 @@ app = Flask(__name__)
 # Конфигурация
 BANK_SERVER_URL = os.environ.get('BANK_SERVER_URL', 'http://localhost:8080')
 CLIENT_PORT = int(os.environ.get('CLIENT_PORT', 5001))
+CLIENT_ID = os.environ.get('CLIENT_ID', str(uuid.uuid4())[:8])  # Генерация ID клиента
 
 # Вспомогательная функция для обработки ошибок при запросах к банку
 def handle_bank_request(func):
@@ -36,7 +38,8 @@ def home():
     return jsonify({
         "status": "online", 
         "message": "Клиентский сервер работает",
-        "bank_server": BANK_SERVER_URL
+        "bank_server": BANK_SERVER_URL,
+        "client_id": CLIENT_ID
     })
 
 # Проверка соединения с банковским сервером
@@ -54,6 +57,39 @@ def check_bank_connection():
             "status": "error",
             "message": f"Код ответа банковского сервера: {response.status_code}"
         }), 400
+
+# Создание банковского счета
+@app.route('/api/v1/create-account', methods=['POST'])
+@handle_bank_request
+def create_account():
+    data = request.json or {}
+    
+    # Добавляем client_id автоматически, если не указан
+    if 'client_id' not in data:
+        data['client_id'] = CLIENT_ID
+    
+    # Отправка запроса в банк
+    response = requests.post(
+        f"{BANK_SERVER_URL}/api/v1/accounts", 
+        json=data
+    )
+    
+    logger.info(f"Попытка создания счета для клиента {data['client_id']}")
+    
+    return jsonify(response.json()), response.status_code
+
+# Получение списка счетов
+@app.route('/api/v1/accounts', methods=['GET'])
+@handle_bank_request
+def get_accounts():
+    client_id = request.args.get('client_id', CLIENT_ID)
+    
+    response = requests.get(
+        f"{BANK_SERVER_URL}/api/v1/accounts", 
+        params={"client_id": client_id}
+    )
+    
+    return jsonify(response.json()), response.status_code
 
 # Пример маршрута для создания транзакции
 @app.route('/api/v1/transaction', methods=['POST'])
@@ -102,4 +138,6 @@ def server_error(e):
 if __name__ == '__main__':
     logger.info(f"Клиентский сервер запускается на порту {CLIENT_PORT}")
     logger.info(f"Банковский сервер доступен по адресу: {BANK_SERVER_URL}")
-    app.run(host='0.0.0.0', port=CLIENT_PORT, debug=True)
+    logger.info(f"ID клиента: {CLIENT_ID}")
+    
+    app.run(host='0.0.0.0', port=CLIENT_PORT, debug=True, use_reloader=False)
