@@ -25,99 +25,74 @@ def status():
         "connections": 0
     })
 
-# Создание нового банковского счета
-@app.route('/api/v1/accounts', methods=['POST'])
-def create_bank_account():
+@app.route('/api/v1/create-client', methods=['POST'])
+def create_client():
     data = request.json
     if not data:
-        return jsonify({"status": "error", "message": "Не указаны данные для создания счета"}), 400
-    
-    # Проверка необходимых полей
-    if 'client_id' not in data:
-        return jsonify({"status": "error", "message": "Не указан идентификатор клиента"}), 400
+        return jsonify({"status": "error", "message": "Нет данных"}), 400
 
-    if 'client_public_key' not in data:
-        return  jsonify({"status": "error", "message": "Не указан публичный ключ клиента"}), 403
-    
-    client_id = data['client_id']
-    initial_balance = data.get('initial_balance', 0.0)
+    if 'start_money' not in data:
+        return jsonify({
+            "status": "error",
+            "message": "start_money is required"
+        }), 400
 
-    bank_service.save_client_public_key(data['client_public_key'])
-    
-    response, status_code = bank_service.create_bank_account(client_id, initial_balance)
-    return jsonify(response), status_code
+    client =  bank_service.create_client(data['start_money'])
 
-# Получение информации о счете
-@app.route('/api/v1/accounts/<account_id>', methods=['GET'])
-def get_bank_account(account_id):
-    response, status_code = bank_service.get_bank_account(account_id)
-    return jsonify(response), status_code
+    return jsonify({
+        "status": "ok",
+        "id": client['id'],
+        "n": pm.n,
+        "divisors": pm.divisors,
+    })
 
-# Получение списка счетов клиента
-@app.route('/api/v1/accounts', methods=['GET'])
-def list_bank_accounts():
-    client_id = request.args.get('client_id')
-    if not client_id:
-        return jsonify({"status": "error", "message": "Не указан идентификатор клиента"}), 400
-    
-    response, status_code = bank_service.list_bank_accounts(client_id)
-    return jsonify(response), status_code
 
-# Создание новой банкноты
+# Подпись новой затенённой банкноты
 @app.route('/api/v1/banknotes', methods=['POST'])
 def create_new_banknote():
     data = request.json
     if not data:
-        return jsonify({"status": "error", "message": "Не указаны данные для создания банкноты"}), 400
+        return jsonify({"status": "error", "message": "Не указаны данные для подписи банкноты"}), 400
     
     # Проверка необходимых полей
-    if 'denomination' not in data:
-        return jsonify({"status": "error", "message": "Не указан номинал банкноты"}), 400
+    if 'banknote' not in data:
+        return jsonify({"status": "error", "message": "Нет банкноты"}), 400
     
-    denomination = data['denomination']
-    
-    response, status_code = bank_service.create_new_banknote(denomination)
-    return jsonify(response), status_code
+    blinded_banknote = data['banknote']
 
-# Получение информации о банкноте по ID
-@app.route('/api/v1/banknotes/<int:banknote_id>', methods=['GET'])
-def get_banknote_info(banknote_id):
-    response, status_code = bank_service.get_banknote_info(banknote_id)
-    return jsonify(response), status_code
+    result_verify = bank_service.verify_blinded_banknote(blinded_banknote)
+    if result_verify:
+        signed_banknote = bank_service.sign_banknote(blinded_banknote)
+        return jsonify({"status": "ok", "signed_banknote": signed_banknote}), 200
+    else:
+        return jsonify({"status": "false", "signed_banknote": 0, "message": "Купюра не валидна"}), 200
 
-# Получение информации о банкноте по UUID
-@app.route('/api/v1/banknotes/uuid/<banknote_uuid>', methods=['GET'])
-def get_banknote_by_uuid_endpoint(banknote_uuid):
-    response, status_code = bank_service.get_banknote_by_uuid_info(banknote_uuid)
-    return jsonify(response), status_code
-
-# Обновление статуса банкноты
-@app.route('/api/v1/banknotes/<int:banknote_id>/status', methods=['PUT'])
-def update_banknote_status_endpoint(banknote_id):
+# Подпись сдачи
+@app.route('/api/v1/sign-change', methods=['POST'])
+def sign_change():
     data = request.json
     if not data:
-        return jsonify({"status": "error", "message": "Не указаны данные для обновления статуса"}), 400
-    
-    # Проверка необходимых полей
-    if 'status' not in data:
-        return jsonify({"status": "error", "message": "Не указан новый статус банкноты"}), 400
-    
-    new_status = data['status']
-    
-    response, status_code = bank_service.update_banknote_status_info(banknote_id, new_status)
-    return jsonify(response), status_code
+        print(f"Ошибка: не данных")
+        return jsonify({
+            "status": "error",
+            "message": "Не указаны данные сдачи"
+        }), 400
 
-# Получение списка банкнот по статусу
-@app.route('/api/v1/banknotes/status/<status>', methods=['GET'])
-def list_banknotes_by_status(status):
-    response, status_code = bank_service.list_banknotes_by_status_info(status)
-    return jsonify(response), status_code
+    # Проверка минимально необходимых полей
+    required_fields = ['blinded_change', 'change_exp']
+    missing_fields = [field for field in required_fields if field not in data]
+    if missing_fields:
+        return jsonify({
+            "status": "error",
+            "message": f"Отсутствуют обязательные поля: {', '.join(missing_fields)}"
+        }), 400
 
-# Получение списка всех банкнот
-@app.route('/api/v1/banknotes', methods=['GET'])
-def list_all_banknotes():
-    response, status_code = bank_service.list_all_banknotes_info()
-    return jsonify(response), status_code
+
+    signed_change_blinded = pm.bank_sign_change(data['blinded_change'], data['change_exp'])
+    return jsonify({
+        "status": "ok",
+        "signed_change_blinded": signed_change_blinded,
+    }), 200
 
 # Обработчик ошибок для 404
 @app.errorhandler(404)

@@ -1,9 +1,15 @@
+import random
+
 from flask import Flask, request, jsonify
 import requests
 import logging
 import os
 import uuid
 from functools import wraps
+import paymentMath as pm
+import service
+from clientSide import CLIENT_API_URL
+from service import Transaction
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, 
@@ -58,71 +64,83 @@ def check_bank_connection():
             "message": f"Код ответа банковского сервера: {response.status_code}"
         }), 400
 
-# Создание банковского счета
-@app.route('/api/v1/create-account', methods=['POST'])
-@handle_bank_request
-def create_account():
-    data = request.json or {}
-    
-    # Добавляем client_id автоматически, если не указан
-    if 'client_id' not in data:
-        data['client_id'] = CLIENT_ID
-    
-    # Отправка запроса в банк
-    response = requests.post(
-        f"{BANK_SERVER_URL}/api/v1/accounts", 
-        json=data
-    )
-    
-    logger.info(f"Попытка создания счета для клиента {data['client_id']}")
-    
-    return jsonify(response.json()), response.status_code
-
-# Получение списка счетов
-@app.route('/api/v1/accounts', methods=['GET'])
-@handle_bank_request
-def get_accounts():
-    client_id = request.args.get('client_id', CLIENT_ID)
-    
-    response = requests.get(
-        f"{BANK_SERVER_URL}/api/v1/accounts", 
-        params={"client_id": client_id}
-    )
-    
-    return jsonify(response.json()), response.status_code
-
 # Пример маршрута для создания транзакции
-@app.route('/api/v1/transaction', methods=['POST'])
+@app.route('/api/v1/payment', methods=['POST'])
 @handle_bank_request
-def create_transaction():
+def get_payment():
     data = request.json
     if not data:
         return jsonify({"status": "error", "message": "Не указаны данные транзакции"}), 400
     
     # Проверка минимально необходимых полей
-    required_fields = ['amount', 'recipient']
+    required_fields = ['payment', 's1', 'payment_exp', 'payment', 'payment_amount']
     missing_fields = [field for field in required_fields if field not in data]
     if missing_fields:
         return jsonify({
             "status": "error", 
             "message": f"Отсутствуют обязательные поля: {', '.join(missing_fields)}"
         }), 400
-    
-    # Отправка запроса на банковский сервер
-    # Этот эндпоинт пока не реализован на банковском сервере, 
-    # но будет готов для будущей интеграции
-    # response = requests.post(
-    #     f"{BANK_SERVER_URL}/api/v1/transaction", 
-    #     json=data
-    # )
-    # return jsonify(response.json()), response.status_code
-    
-    # Временная заглушка
-    return jsonify({
-        "status": "success", 
-        "message": "Транзакция зарегистрирована",
-        "transaction_id": "sample-id-12345"
-    })
+
+    # Проверка платежа клиентом
+    verified_payment = pm.verify_payment(data['payment'], pm.get_h(), data['payment_exp'], pm.n)
+    print(f"Проверка клиентом (должно быть равно s1): {verified_payment}")
+    print(f"Исходный s1: {data['s1']}")
+
+    if data['payment_amount'] < data['amount']:
+        if 'blinded_change' not in data or 'change_exp' not in data:
+            return jsonify({
+                "status": "error",
+                "message": "не хватает обязательных полей для сдачи"
+            })
+
+        response = requests.post(f"{BANK_SERVER_URL}/api/v1/sign-change", json={
+            "blinded_change": data['blinded_change'],
+            "change_exp": data['change_exp'],
+        })
+
+        data = response.json()
+        print(f"Банк вернул подписанную сдачу: {data['signed_change_blinded']}")
+
+        response = requests.post(f"{CLIENT_API_URL}/api/v1/payment", json={
+            "signed_change_blinded": data['signed_change_blinded'],
+            "change_exp": data['change_exp'],
+        })
+        data = response.json()
+        #TODO: Дописать зачисление денег на счёт продавца
+
+
+@app.route('/api/v1/verify-change', methods=['POST'])
+def verify_change():
+    data = request.json
+    if not data:
+        return jsonify({
+            "status": "error",
+            "message": "не указаны данные со сдачей"
+        }), 400
+
+    if 'signed_change_blinded' not in data:
+        return jsonify({
+            "status": "error",
+            "message": "нет необходимого поля signed_change_blinded"
+        })
+
+    if 'change_exp' not in data:
+        return jsonify({
+            "status": "error",
+            "message": "нет необходимого поля change_exp"
+        })
+
+    last_transaction: Transaction = service.List_transaction[-1]
+    # Снятие затемнения сдачи
+    change_bill = pm.unblind_change(data['signed_change_blinded'], last_transaction.ra, pm.n)
+    print(f"Полученная сдача: {change_bill}")
+
+    # Проверка сдачи
+    verified_change = pow(change_bill, data['change_exp'], pm.n)
+    print(f"Проверка сдачи (должно быть равно t): {verified_change}")
+    print(f"Исходное t: {last_transaction.t}")
+
+
 
 # Обработчик ошибок для 404
 @app.errorhandler(404)

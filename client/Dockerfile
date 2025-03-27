@@ -7,8 +7,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY server.py .
 COPY service.py .
-COPY client.py .
+COPY clientSide.py .
 COPY main.py .
+COPY paymentMath.py .
 
 # Устанавливаем права на выполнение
 RUN chmod +x main.py
